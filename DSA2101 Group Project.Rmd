@@ -1,0 +1,372 @@
+---
+title: "A Glimpse Into the Himalayan Expedition Dataset: Summit Success and Contributing Factors"
+author: "Cai Dengcheng, Chen Zhijing, Huang Zhiyuan, Liu Yutong, Tang Fei, Wen Jiaqi"
+date: "2025-04-16"
+
+output:
+  html_document:
+    self_contained: true
+    toc: true
+    toc_float:
+      collapsed: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(message = FALSE, warning = FALSE, 
+                      include = TRUE,
+                      fig.align = "center",  out.width = "80%")
+```
+
+```{r, include=FALSE}
+#Importing necessary libraries
+
+library(tidyverse)
+library(stringr)
+library(dplyr)
+library(ggplot2)
+```
+
+
+# 1. Introduction
+
+The dataset we are exploring is derived from the Himalayan Database, a comprehensive record of mountaineering expeditions across the Himalayan range. These expeditions include attempts on peaks of various altitudes, seasons, and team compositions. The original dataset records **882 expeditions and information on 480 peaks**, providing a rich foundation for statistical analysis and insight.
+
+This dataset, compiled and cleaned by Salisbury and Hawley (2007), includes attributes spanning both expedition logistics and peak characteristics. After merging the expedition and peak metadata, we focus our analysis on variables that are believed to influence the success of expeditions and the rate of success, defined as the proportion of team members who successfully reached the summit.
+
+There are several key categories of variables gathered from the dataset:
+
+* **Expedition Information** (such as season, team size, and use of oxygen)
+* **Outcome Details** (summit members, termination reasons, fatalities)
+* **Geographic Context** (peak height, region, route information)
+* **External Support** (hired personnel, number of camps, ropes used)
+
+The dataset we used excludes entries with missing key variables such as summit members and total team size. We also removed expeditions with zero total members to ensure meaningful success rate calculations.
+
+Here is our question of interest regarding the dataset:
+
+**“What are the key factors affecting summit success in Himalayan expeditions?”**
+
+To answer this, we examine how success varies with **peak height**, **team size and hired support**, **oxygen use**, **expedition duration**, and **season**. By isolating the contribution of each element, we aim to provide evidence‑based guidance on the resources and timing that maximise the likelihood of reaching the top in one of the planet’s most demanding environments.
+
+
+# 2. Data Cleaning and Summary
+
+Before analyzing the factors contributing to the success of Himalayan expeditions, we conducted a series of data cleaning steps to ensure consistency and reliability. The expedition data `exped_tidy.csv` and peak metadata `peaks_tidy.csv` were both sourced from the [TidyTuesday 2025-01-21 dataset](https://github.com/rfordatascience/tidytuesday/blob/main/data/2025/2025-01-21/readme.md), and merged using the shared identifier `PEAKID`.
+
+After merging, we focused our analysis on a curated subset of variables that are hypothesized to influence summit outcomes. These include:
+
+* Summit performance: `SMTMEMBERS`, `TOTMEMBERS`
+* Environmental factors: `HEIGHTM`, `SEASON_FACTOR`
+* Logistical resources: `O2USED`, `TOTHIRED`
+* Expedition duration: `TOTDAYS`
+* Outcome reason: `TERMREASON_FACTOR`
+
+To ensure data completeness and validity, we applied the following filters:
+
+* Removed rows with missing values for `SMTMEMBERS`, `TOTMEMBERS`, and `O2USED`.
+
+* Excluded expeditions with `TOTMEMBERS == 0` to avoid invalid success calculations.
+
+We then constructed a binary variable, `success`, to indicate whether the expedition successfully summited. This was derived from the `TERMREASON_FACTOR` column. `success` is set to **1** if the string `"success"` is contained as a substring, including `"Success (main peak)"` and `"Success (subpeak, foresummit)"`, otherwise, `success` is set to **0**. This variable allowed us to classify expeditions into successful and unsuccessful categories based on their reported termination reason.
+
+The final cleaned dataset includes the following key variables used in our analysis:
+
+* `SMTMEMBERS`: Number of expedition members who summited
+
+* `TOTMEMBERS`: Total number of team members
+
+* `O2USED`: Boolean indicating use of supplemental oxygen
+
+* `HEIGHTM`: Elevation of the mountain peak (in meters)
+
+* `TERMREASON_FACTOR`: Reported reason for expedition termination
+
+* `TOTHIRED`: Total number of hired personnel (e.g., guides or porters)
+
+* `SEASON_FACTOR`: Season during which the expedition took place
+
+* `TOTDAYS`: Total duration of the expedition (in days)
+
+* `success`: Binary indicator of whether the expedition summited (1 = summit reached; 0 = did not summit)
+
+These selections form the basis for our exploratory analysis and modeling of expedition success.
+
+
+```{r}
+exped <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-01-21/exped_tidy.csv')
+peaks <- readr::read_csv('https://raw.githubusercontent.com/rfordatascience/tidytuesday/main/data/2025/2025-01-21/peaks_tidy.csv')
+
+data <- exped %>%
+  left_join(peaks %>% select(PEAKID, HEIGHTM), by = "PEAKID") %>%
+  filter(!is.na(SMTMEMBERS), !is.na(TOTMEMBERS), TOTMEMBERS > 0, !is.na(O2USED)) %>%
+  select(SMTMEMBERS, TOTMEMBERS, O2USED, HEIGHTM, TERMREASON_FACTOR, TOTHIRED, SEASON_FACTOR, TOTDAYS)
+data$success <- ifelse(grepl("Success", data$TERMREASON_FACTOR, ignore.case = TRUE), 1, 0)
+
+```
+
+After filtering, **868 expeditions** remain in scope. Roughly **74%** of these parties reached their summits, making success the “typical” outcome in this cleaned subset. A Himalayan expedition in our data is usually compact (median **6 members**) yet operates at extreme altitude—the median peak in the sample tops 8163m. Supplemental oxygen is used on **46%** of expeditions, hinting that nearly half the teams rely on bottled Oxygen even before we isolate the highest peaks.
+
+A quick split by outcome underscores two potential levers of success. Successful teams are larger (median **8 climbers** vs 4) and five‑to‑six times more likely to carry oxygen (**58%** vs **10%**). While duration (`TOTDAYS`) is frequently unreported (median **0** in both groups), exploratory plots that focus on non‑zero records suggest richer temporal patterns, which we examine later. Taken together, these headline figures give us a first sense that resourcing (people and oxygen) may explain a good share of the high overall success rate.
+
+```{r}
+# overall snapshot
+overall_stats <- data %>% 
+  summarise(
+    expeditions            = n(),
+    success_rate           = mean(success, na.rm = TRUE),          # proportion
+    median_team_size       = median(TOTMEMBERS, na.rm = TRUE),
+    median_peak_height_m   = median(HEIGHTM, na.rm = TRUE),
+    pct_using_oxygen       = mean(O2USED, na.rm = TRUE),           # proportion
+    median_duration_days   = median(TOTDAYS, na.rm = TRUE)
+  )
+
+# comparison by outcome (0 = fail, 1 = success)
+by_success <- data %>% 
+  group_by(success) %>% 
+  summarise(
+    expeditions          = n(),
+    median_team_size     = median(TOTMEMBERS, na.rm = TRUE),
+    pct_using_oxygen     = mean(O2USED, na.rm = TRUE),
+    median_duration_days = median(TOTDAYS, na.rm = TRUE),
+    .groups = "drop"
+  )
+
+# print both tables
+overall_stats
+by_success
+
+```
+
+
+
+# 3. Visualisations
+
+## 3.1 Plot 1: Summit success rate vs. supplemental oxygen across altitude bands
+
+This plot examines the relationship between the use of supplemental oxygen (`O2USED`) and summit success rate (`success_rate`) across different peak height categories (`height_cat`). The aim is to determine whether the use of oxygen influences the success rate of expeditions at varying altitudes.
+
+We calculate the success rate by dividing the number of members who reached the summit (`SMTMEMBERS`) by the total number of members in the expedition (`TOTMEMBERS`). To make comparisons more interpretable, we categorise the continuous peak height variable `HEIGHTM` into four elevation bands: `<6000m`, `6000–6999m`, `7000–7999m`, and `8000+m`, stored in the `height_cat` variable. The mean success rate is then computed for each group defined by both `height_cat` and `O2USED`. 
+
+To visualise this relationship, we use a **grouped bar chart** (`geom_col()`), which allows us to clearly observe success rate differences between oxygen-supported and non-oxygen-supported expeditions across height bands. Furthermore, we introduce a custom bar width for `<6000m` (narrower bar), mimicking the lower expedition volume in that category and emphasising how the use of oxygen is less relevant or rare in lower-altitude climbs.
+
+```{r plot1}
+data <- data %>%
+  mutate(
+    success_rate = SMTMEMBERS / TOTMEMBERS,
+    height_cat = case_when(
+      HEIGHTM < 6000 ~ "<6000m",
+      HEIGHTM < 7000 ~ "6000-6999m",
+      HEIGHTM < 8000 ~ "7000-7999m",
+      TRUE ~ "8000+m"
+    )
+  )
+
+data$height_cat <- factor(data$height_cat, levels = c("<6000m", "6000-6999m", "7000-7999m", "8000+m"))
+
+summary_df <- data %>%
+  group_by(height_cat, O2USED) %>%
+  summarise(success_rate = mean(success_rate, na.rm = TRUE), .groups = "drop")
+
+summary_df <- summary_df %>%
+  mutate(bar_width = if_else(height_cat == "<6000m", 0.4, 0.9))
+
+ggplot(summary_df, aes(x = height_cat, y = success_rate, fill = O2USED)) +
+  geom_col(position = position_dodge(width = 0.9), 
+           aes(width = bar_width), 
+           color = "black") +  
+  scale_fill_manual(values = c("salmon", "turquoise"), name = "Oxygen Used") +
+  labs(
+    title = "Success Rate by Use of Supplemental Oxygen and Peak Height",
+    x = "Peak Height Category",
+    y = "Success Rate"
+  ) +
+  theme_minimal() +
+  theme(
+    plot.title = element_text(face = "bold"),
+    axis.title.x = element_text(face = "bold"),
+    axis.title.y = element_text(face = "bold")
+  )
+```
+
+## 3.2 Plot 2: Team size and hired staff: joint effect on summit outcomes
+
+This plot explores the relationship between team size (`TOTMEMBERS`) and the number of hired personnel above base camp (`TOTHIRED`), with a focus on how these factors relate to the outcome of Himalayan expeditions (`success`). The aim is to determine whether larger teams rely more on hired support and whether this support correlates with successful expedition outcomes.
+
+
+To enable clearer comparisons, team sizes are grouped into five categories using the `cut()` function: `1–5`, `6–10`, `11–15`, `16–20`, and `20+`, stored in a new variable `TOTMEMBERS_GROUP`. Expeditions with missing values in team size or hired personnel are excluded to ensure data integrity.
+A **box plot** is then created using `ggplot2`, with `TOTMEMBERS_GROUP` on the x-axis and `TOTHIRED` on the y-axis. The data is color-coded by expedition outcome (`success`), enabling visual differentiation between successful and failed expeditions. Boxplots are chosen because they effectively summarize the distribution of hired support within each team size group, highlighting medians, variability, and potential outliers.
+Manual color schemes are applied for both fill and outline aesthetics to improve readability and visual appeal. The minimalist theme and text formatting further enhance clarity and emphasis on key variables.
+
+```{r plot2}
+data$TOTMEMBERS_GROUP <- cut(
+  data$TOTMEMBERS,
+  breaks = c(0, 5, 10, 15, 20, Inf),
+  labels = c("1–5", "6–10", "11–15", "16–20", "20+"),
+  right = TRUE
+)
+
+data <- data %>% 
+  filter(!is.na(TOTMEMBERS_GROUP) & !is.na(TOTHIRED))
+
+ggplot(data, aes(x = TOTMEMBERS_GROUP, y = TOTHIRED, fill = factor(success), color = factor(success))) +
+  geom_boxplot(alpha = 0.6, outlier.shape = NA) +  
+  labs(
+    title = "Team Size vs Hired Support: Impact on Success in Himalayan Expeditions",
+    x = "Team Size Group", 
+    y = "Number of Hired Personnel Above Base Camp",
+    fill = "Outcome", 
+    color = "Outcome"
+  ) +
+  scale_fill_manual(
+    values = c("skyblue", "yellow"),
+    labels = c("Failure", "Success")
+  ) +
+  scale_color_manual(
+    values = c("darkblue", "darkorange"),
+    labels = c("Failure", "Success")
+  ) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_text(size = 11, color = "black"), 
+    axis.text.y = element_text(size = 12, color = "black"), 
+    axis.title.x = element_text(size = 10, face = "bold"),  
+    axis.title.y = element_text(size = 8, face = "bold"),  
+    plot.title = element_text(size = 10, face = "bold", color = "black", hjust = 0.5),
+    legend.title = element_text(size = 12), 
+    legend.text = element_text(size = 10)
+  )
+```
+
+
+## 3.3 Plot 3: Seasonal variation in the length of successful expeditions
+
+This plot examines the relationship between the total duration of successful expeditions (`TOTDAYS`) and season (`SEASON_FACTOR`). The objective is to determine whether specific seasons correlate with longer or shorter expedition duration. The variable `SEASON_FACTOR` was selected due to the significant impact that seasonal conditions—such as temperature, snowfall, and daylight hours—have on mountaineering outcomes. `TOTDAYS` was chosen to represent the total time commitment required for a successful expedition.
+
+
+A **violin plot** is employed to visualise this relationship, as it effectively illustrates the complete distribution of duration values for each season. In contrast to a box plot, which primarily emphasises summary statistics such as the median and interquartile range, a violin plot incorporates kernel density information. This feature enables a clearer understanding of the distribution shape and data concentration, thereby facilitating comparisons of variation and typical durations for successful expeditions across different seasons. This methodology is instrumental in identifying trends pertinent to expedition planning and execution.
+
+```{r plot3}
+data <- data %>%
+  filter(!is.na(TOTDAYS), TOTDAYS != 0)
+
+data$SEASON_FACTOR <- factor(
+  data$SEASON_FACTOR,
+  levels = c("Spring", "Summer", "Autumn", "Winter")
+)
+
+strong_season_colors <- c(
+  "Spring" = "#7CAE00",  
+  "Summer" = "#00BFC4",  
+  "Autumn" = "#F8766D",  
+  "Winter" = "#C77CFF"   
+)
+
+ggplot(data, aes(x = SEASON_FACTOR, y = TOTDAYS, fill = SEASON_FACTOR)) +
+  geom_violin(trim = FALSE, alpha = 0.9) +
+  geom_boxplot(width = 0.1, fill = "white", outlier.shape = NA) +
+  scale_fill_manual(values = strong_season_colors) +
+  labs(
+    title = "Distribution of Successful Expedition Duration by Season",
+    x = "Season",
+    y = "Total Expedition Days"
+  ) +
+  ylim(0, NA)+
+  theme_bw() +
+  theme(
+    legend.position = "right",
+    plot.title = element_text(face = "bold", hjust = 0.5),
+    axis.title = element_text(face = "bold"),
+    axis.text = element_text(size = 11)
+  )
+```
+
+
+# 4. Discussions
+
+## 4.1 Discussion on Plot 1
+
+The bar chart indicates that **the use of supplemental oxygen significantly improves success rates on higher peaks**, particularly those above 8,000 meters. Users of supplemental oxygen demonstrate notably higher success rates, whereas success rates for non-users decline as altitude increases.
+
+This reflects the greater physical demands at higher elevations, where oxygen becomes crucial for endurance and safety. In contrast, for peaks under 6000m, expeditions succeed at high rates regardless of oxygen use, and oxygen is rarely used.
+
+The 6,000 to 6,999 meter range reveals a transitional phase: oxygen users perform better, but non-users still succeed at moderate rates. This suggests that oxygen use is helpful but not essential at mid-high elevations.
+
+Overall, the plot suggests that oxygen use is a key factor for high-altitude success, but has little impact on lower-altitude climbs.
+
+
+## 4.2 Discussion on Plot 2
+
+The boxplot reveals distinct patterns in hired support usage across different team sizes and outcomes. In general, larger teams tend to hire more personnel above base camp, reflecting **the increased logistical complexity and support needs of bigger expeditions**.
+
+Among smaller teams (e.g., 1–5 members), both successful and unsuccessful groups show lower levels of hired help, suggesting that these expeditions may rely more on self-sufficiency. As team size increases, the number of hired personnel also rises, especially in successful expeditions. This trend is most pronounced in the `20+` group, where successful teams consistently employ more hired support than failed ones.
+
+The visual contrast between successful and unsuccessful expeditions across team sizes implies that **access to additional manpower above base camp may play a crucial role in achieving summit goals**. However, some overlap exists, indicating that hired support alone does not guarantee success, and other factors such as experience, weather, and team coordination also contribute.
+
+Overall, the plot suggests that while hired support becomes more important as team size grows, its strategic use — particularly for large expeditions — can enhance the likelihood of success in high-altitude environments. This insight may inform decisions around resource allocation and logistic planning for expeditions.
+
+
+## 4.3 Discussion on Plot 3
+
+The violin plot reveals **clear seasonal patterns in the duration of successful expeditions**. **Spring** shows a wide range of durations with a concentration around 30 days. This suggests that both short and long expeditions are capable of success during spring, possibly due to favourable climbing conditions that allow for flexible expedition strategies (When Is the Best Time to Climb Mount Everest? | Elite Exped, n.d.).
+
+In contrast, **summer** expeditions tend to be shorter, with a narrow distribution centered around 5–10 days. This implies that only brief, targeted expeditions are likely to succeed in the summer months, potentially due to monsoon season weather volatility and therefore shorter windows of opportunity (Peak Climbing Nepal, 2024). 
+
+**Autumn**, on the other hand, displays a distinctively bulbous shape with a prominent width at around 15 days, indicating a strong concentration of successful expeditions around this duration. 
+
+**Winter** expeditions are generally longer, clustering around 25 days, but with a more varied distribution compared to autumn. This may reflect the greater unpredictability of winter conditions, requiring more diverse expedition strategies and durations to achieve success (Furtenbach Adventures GmbH, 2024).
+
+Overall, the plot suggests that **seasonal timing plays an important role in expedition success**, with spring offering the greatest flexibility in expedition length, while other seasons may require more strategic planning or face environmental limitations. These insights could help climbers and organisers optimise timing and resource allocation for higher chances of success.
+
+## 4.4 Overall Discussion
+
+The three analyses point to a consistent pattern: **summit outcomes depend heavily on physiological support, logistical capacity, and seasonal conditions**. First, **supplemental oxygen** markedly improves the probability of success on peaks above 8000m, whereas its effect is negligible at lower elevations (Plot 1). Second, larger teams that employ more hired personnel above base camp achieve higher success rates, indicating that **additional labour and expertise** at altitude provide a measurable logistical advantage (Plot 2). Third, **favourable weather windows** in spring allow a wide range of expedition durations to succeed, while summer’s monsoon limits successful climbs to short, targeted attempts; autumn and winter fall between these extremes (Plot 3). Collectively, the evidence suggests that effective resource allocation—oxygen, team size, and hired support—combined with appropriate seasonal timing, is critical for maximising expedition success in high‑altitude Himalayan environments.
+
+# 5. Teamwork
+
+Our task allocation is as follows:
+
+* **Chen Zhijing**: Plot 1 and its discussion, Data cleaning, Introduction.
+* **Wen Jiaqi**: Plot 1 and its discussion.
+* **Tang Fei**: Plot 2 and its discussion, Data cleaning, Introduction.
+* **Huang Zhiyuan**: Plot 2 and its discussion, Data cleaning, Introduction.
+* **Cai Dengcheng**: Plot 3 and its discussion, Summary of key statistics, Overall formatting.
+* **Liu Yutong**: Plot 3 and its discussion, Summary of discussions.
+
+# 6. Reference
+
+Furtenbach Adventures GmbH. (2024, December 12). The best season for a Mount Everest expedition. Furtenbach Adventures. https://www.furtenbachadventures.com/en/guidebook/best-everest-season/
+
+Peak Climbing Nepal. (2024, November 20). Everest climbing season: 4‑season Everest expedition guide. https://peakclimbingnepal.com/everest-climbing-season/
+
+R for Data Science Online Learning Community. (2025, January 21). Himalayan mountaineering expeditions (TidyTuesday, Week 3 2025) [Data set]. GitHub. Retrieved April 19, 2025, from https://github.com/rfordatascience/tidytuesday/tree/main/data/2025/2025-01-21
+
+The Himalayan Database. (2017). The Himalayan Database: Expedition archives of Elizabeth Hawley (Version 2) [Data set]. The Himalayan Database non‑profit. Retrieved April 19, 2025, from https://www.himalayandatabase.com/
+
+When is the best time to climb Mount Everest? | Elite Exped. (n.d.). Elite Exped. https://www.eliteexped.com/best-time-to-climb-mount-everest
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
