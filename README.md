@@ -5,7 +5,6 @@ A comprehensive statistical analysis of factors affecting summit success rates i
 ## 📁 Folder Contents
 
 - `Himalayan.Rmd` – R Markdown file for data cleaning, analysis, and visualization  
-- `Himalayan.html` – Rendered HTML report summarizing the full project  
 - `README.md` – Project overview and structure
 
 ## 📌 Project Overview
@@ -49,4 +48,4 @@ The Himalayas are known for their extreme altitudes and expedition challenges. T
 
 ## 📄 Full Report
 
-📑 Please see [Himalayan.html](https://github.com/zhijing31/Himalayan-Climbing-Expeditions/blob/main/Himalayan.html) for the complete analysis and visualizations.
+📑 Please see [Himalayan.html](file:///Users/chenzhijing/Desktop/DSA2101/Himalayan.html) for the complete analysis and visualizations.
