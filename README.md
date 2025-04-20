@@ -1,6 +1,6 @@
 # 📝 Project Title: Himalayan Expedition Success Analysis
 
-A comprehensive statistical analysis of factors affecting summit success rates in Himalayan climbing expeditions, using the 2025 TidyTuesday dataset.
+A comprehensive analysis of factors affecting summit success rates in Himalayan climbing expeditions, using the 2025 TidyTuesday dataset.
 
 ## 📁 Folder Contents
 
@@ -45,7 +45,3 @@ The Himalayas are known for their extreme altitudes and expedition challenges. T
 - Preprocessing and cleaning large-scale real-world datasets is critical  
 - Exploratory data visualization can reveal important climbing patterns  
 - Interpretability matters—simple plots and clear metrics help communicate findings
-
-## 📄 Full Report
-
-📑 Please see [Himalayan.html](file:///Users/chenzhijing/Desktop/DSA2101/Himalayan.html) for the complete analysis and visualizations.
