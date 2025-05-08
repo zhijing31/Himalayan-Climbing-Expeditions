@@ -5,6 +5,7 @@ A comprehensive analysis of factors affecting summit success rates in Himalayan 
 ## 📁 Folder Contents
 
 - `Himalayan.Rmd` – R Markdown file for data cleaning, analysis, and visualization  
+- `Himalayan.html`- HTML output generated from the R Markdown file, showcasing the full project report with code, outputs, and visualizations.
 - `README.md` – Project overview and structure
 
 ## 📌 Project Overview
